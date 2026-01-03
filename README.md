@@ -39,8 +39,6 @@ linkedin-saved-post-extractor/
 
 ---
 
----
-
 ## ⚙️ Installation
 
 1. Clone or download this repository
@@ -100,8 +98,6 @@ Avoids hardcoded delays by waiting for DOM changes
 
 ---
 
----
-
 ## ⚠️ Important Notes
 
 LinkedIn frequently changes its DOM structure
@@ -129,12 +125,10 @@ UI to configure number of posts to extract
 
 Option to unsave posts after extraction
 
-## Better progress indicator in popup UI
+Better progress indicator in popup UI
 
 ---
 
 👤 Author
 
 ## Akshit Sanwal
-
----
