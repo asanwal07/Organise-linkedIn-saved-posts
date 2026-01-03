@@ -1,8 +1,28 @@
 console.log("[LinkedIn Extractor] Content script loaded");
 
+/* =========================
+   🔹 GLOBAL EXTRACTION STATE
+   ========================= */
+let extractionState = {
+    isRunning: false,
+    extracted: 0,
+    limit: 0,
+};
+
+/* =========================
+   🔹 UTILS
+   ========================= */
 const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
 
-// Simple tag inference for demonstration
+function cleanPostText(text) {
+    return text
+        .replace(/\n{2,}/g, "\n")
+        .replace(/\s+\n/g, "\n")
+        .replace(/\n\s+/g, "\n")
+        .replace(/\s{2,}/g, " ")
+        .trim();
+}
+
 function inferTags(text) {
     const tags = [];
     if (/javascript|js|react|frontend/i.test(text)) tags.push("frontend");
@@ -13,15 +33,16 @@ function inferTags(text) {
     return tags;
 }
 
-// Scroll and extract posts
-async function extractSavedPosts(limit = 50) {
+/* =========================
+   🔹 MAIN EXTRACTION
+   ========================= */
+async function extractSavedPosts(limit = 20) {
     let extractedPosts = 0;
     const results = [];
 
     console.log("[LinkedIn Extractor] Starting extraction...");
 
     while (extractedPosts < limit) {
-        // 1️⃣ Grab all currently loaded posts
         const posts = document.querySelectorAll(
             "div.entity-result__content-container"
         );
@@ -36,33 +57,31 @@ async function extractSavedPosts(limit = 50) {
             );
             if (seeMore) {
                 seeMore.click();
-                await sleep(300 + Math.random() * 200);
+                await sleep(300);
             }
 
-            // Extract post text
+            // Text
             const textEl = post.querySelector(
                 "p.entity-result__content-summary"
             );
-            const text = textEl?.innerText.trim() || "";
+            const rawText = textEl?.innerText || "";
+            const text = cleanPostText(rawText);
             if (!text) continue;
 
-            // Extract author & profile
+            // Author
             const authorAnchor = post.querySelector('a[href*="/in/"]');
             const author = authorAnchor?.innerText.trim() || "";
             const profileUrl = authorAnchor?.href || "";
 
-            // ✅ Post URL (NO dropdown click)
+            // Post URL
             let postUrl = "";
-            const postLinkAnchor = post.querySelector(
-                'a[href*="/feed/update"], a[href*="/posts/"], a[href*="/activity"]'
-            );
+            const postLinkAnchor =
+                post.querySelector('a[href*="/feed/update"]') ||
+                post.querySelector('a[href*="/posts/"]') ||
+                post.querySelector('a[href*="/activity"]');
 
-            if (postLinkAnchor) {
-                postUrl = postLinkAnchor.href.startsWith("http")
-                    ? postLinkAnchor.href
-                    : `https://www.linkedin.com${postLinkAnchor.getAttribute(
-                          "href"
-                      )}`;
+            if (postLinkAnchor?.href) {
+                postUrl = postLinkAnchor.href.split("?")[0];
             }
 
             results.push({
@@ -74,32 +93,39 @@ async function extractSavedPosts(limit = 50) {
             });
 
             extractedPosts++;
+
+            /* =========================
+         🔹 STATE + PROGRESS UPDATE
+         ========================= */
+            extractionState.extracted = extractedPosts;
+
+            chrome.runtime.sendMessage({
+                type: "PROGRESS_UPDATE",
+                state: extractionState,
+            });
+
             console.log(
                 `[LinkedIn Extractor] Extracted ${extractedPosts}: ${author}`
             );
 
             if (extractedPosts >= limit) break;
-            await sleep(200 + Math.random() * 200); // small delay per post
+            await sleep(200);
         }
 
-        // 2️⃣ Scroll container a bit
+        // Scroll
         const container = document.querySelector(
             "div.scaffold-finite-scroll__content"
         );
         if (container) container.scrollBy(0, 300);
-        await sleep(500);
 
-        // 3️⃣ Click "Show more results" button if present
+        await sleep(800);
+
         const showMoreBtn = document.querySelector(
             "button.scaffold-finite-scroll__load-button"
         );
         if (showMoreBtn) {
             showMoreBtn.click();
-            console.log('[LinkedIn Extractor] Clicked "Show more results"');
-            await sleep(1500 + Math.random() * 1000); // wait for new posts
-        } else {
-            // If no button, small pause
-            await sleep(1000);
+            await sleep(1500);
         }
     }
 
@@ -107,10 +133,15 @@ async function extractSavedPosts(limit = 50) {
         "[LinkedIn Extractor] Extraction completed. Total posts:",
         results.length
     );
+
     downloadJSON(results);
+
+    extractionState.isRunning = false;
 }
 
-// Download JSON in chunks of 10 posts
+/* =========================
+   🔹 DOWNLOAD (WITH CHUNKS)
+   ========================= */
 function downloadJSON(data) {
     const chunks = [];
     for (let i = 0; i < data.length; i += 10) {
@@ -130,8 +161,8 @@ function downloadJSON(data) {
     const blob = new Blob([JSON.stringify(payload, null, 2)], {
         type: "application/json",
     });
-    const url = URL.createObjectURL(blob);
 
+    const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = "linkedin-saved-posts.json";
@@ -141,10 +172,24 @@ function downloadJSON(data) {
     console.log("[LinkedIn Extractor] JSON download complete!");
 }
 
-// Listen for message from popup
-chrome.runtime.onMessage.addListener((msg) => {
+/* =========================
+   🔹 MESSAGE HANDLING
+   ========================= */
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg.action === "START_EXTRACTION") {
-        const limit = msg.limit || 50;
-        extractSavedPosts(limit);
+        if (extractionState.isRunning) {
+            console.log("[LinkedIn Extractor] Already running");
+            return;
+        }
+
+        extractionState.isRunning = true;
+        extractionState.extracted = 0;
+        extractionState.limit = msg.limit || 50;
+
+        extractSavedPosts(extractionState.limit);
+    }
+
+    if (msg.action === "GET_STATUS") {
+        sendResponse(extractionState);
     }
 });
