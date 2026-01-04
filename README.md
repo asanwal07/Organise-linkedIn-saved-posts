@@ -43,7 +43,7 @@ linkedin-saved-post-extractor/
 
 1. Clone or download this repository
 2. Open **Google Chrome**
-3. Navigate to:
+3. Navigate to: Extensions
 4. Enable **Developer Mode** (top-right corner)
 5. Click **Load unpacked**
 6. Select the project folder
