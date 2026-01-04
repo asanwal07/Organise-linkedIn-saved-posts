@@ -29,8 +29,7 @@ A Chrome Extension that automatically extracts LinkedIn **saved posts**, handlin
 
 ## 📂 Project Structure
 
-linkedin-saved-post-extractor/
-│
+linkedin-saved-post-extractor <br>
 ├── manifest.json <br>
 ├── content.js <br>
 ├── popup.html <br>
